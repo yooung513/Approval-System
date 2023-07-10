@@ -1,0 +1,518 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!DOCTYPE mapper
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="mapper">
+
+	<!-- 아이디 확인 -->
+	<select id="idCheck" parameterType="map" resultType="int">
+		select COUNT(USER_CODE)
+		  from LDY_USER
+		 where ID = #{id}
+	</select>
+
+
+	<!-- 로그인 유저 확인 --> 
+	<select id="login" parameterType="map" resultType="int">
+		select 
+				COUNT(USER_CODE)
+		from 	LDY_USER
+	   where  ID = #{id}
+		 and  PW = #{pw}
+	</select>
+	
+	
+	<resultMap type="com.system.approval.domain.UserVO" id="userMap">
+		<result column="USER_CODE" 		property="userCode"/>
+		<result column="ID" 			property="id"/>
+		<result column="NAME" 			property="name"/>
+		<result column="RANK_CODE" 		property="rankCode"/>
+		<result column="RANK_NAME" 		property="rankName"/>
+	</resultMap>
+	
+	<!-- 유저 정보 -->
+	<select id="user" parameterType="map" resultMap="userMap">
+		select  USER_CODE
+			  , ID
+			  , NAME
+			  , B.RANK_CODE
+			  , RANK_NAME
+		  from  LDY_USER A LEFT JOIN ( SELECT  RANK_CODE
+		  									 , RANK_NAME
+		  								 FROM  LDY_RANK) B
+		  						  ON A.RANK_CODE = B.RANK_CODE
+		where  ID = #{id}
+		  and  PW = #{pw}
+	</select>
+	
+	<select id="userByUserCode" parameterType="int" resultMap="userMap">
+		select  USER_CODE
+			  , ID
+			  , NAME
+			  , B.RANK_CODE
+			  , RANK_NAME
+		  from  LDY_USER A LEFT JOIN ( SELECT  RANK_CODE
+		  									 , RANK_NAME
+		  								 FROM  LDY_RANK) B
+		  						  ON A.RANK_CODE = B.RANK_CODE
+		where  USER_CODE = #{userCode}
+	</select>
+	
+	
+	<!-- 작성할 게시글 번호 조회 -->
+	<select id="findNextSeq" resultType="int">
+		select NVL(MAX(SEQ), 0)+1 
+		  from LDY_DOCUMENT
+	</select>
+	
+	<!-- 게시글 존재 여부 확인 -->
+	<select id="checkDoc" resultType="int">
+		select COUNT(SEQ)
+		  from LDY_DOCUMENT
+		 where SEQ = #{findSeq}
+	</select>
+	
+	<!-- 게시글 리스트 글쓰기 -->
+	<insert id="insertDoc" parameterType="map">
+		insert into LDY_DOCUMENT (
+								 SEQ, 
+								 TITLE, 
+								 CONTENT, 
+								 REGDATE, 
+								 W_CODE, 
+								 STATE_CODE
+								 <if test="aCode != null and aCode != ''">
+								 ,A_CODE
+								 ,APPDATE
+								 </if>
+								 <if test="subCode != null and subCode != ''">
+								 ,SUB_CODE
+								 </if>
+								 )
+						  values (
+						  		 #{seq},
+						  		 #{title},
+						  		 #{content},
+						  		 sysdate,
+						  		 #{userCode},
+						  		 #{stateCode}
+						  		 <if test="aCode != null and aCode != ''">
+						  		 ,#{aCode}
+						  		 ,sysdate
+						  		 </if>
+						  		 <if test="subCode != null and subCode != ''">
+						  		 ,#{subCode}
+						  		 </if>
+								 )
+	</insert>
+	
+	
+	<!-- 게시글 히스토리 업로드-->
+	<insert id="insertHis" parameterType="map">
+		insert into LDY_HISTORY (
+								 SEQ, 
+								 HIS_SEQ, 
+								 DOC_SEQ, 
+								 APPDATE, 
+								 A_CODE, 
+								 STATE_CODE
+								 <if test="subCode != null and subCode != ''">
+								 ,SUB_CODE
+								 </if>
+								 )
+						  values (
+						  		 (select NVL(MAX(SEQ), 0)+1 
+		  							from LDY_HISTORY),
+						  		 (select NVL(MAX(HIS_SEQ), 0)+1
+						  		 	from LDY_HISTORY
+						  		   where DOC_SEQ = #{seq}),
+						  		 #{seq},
+						  		 sysdate,
+						  		 #{userCode},
+						  		 #{stateCode}
+						  		 <if test="subCode != null and subCode != ''">
+						  		 ,#{subCode}
+						  		 </if>
+								 )
+	</insert>
+	
+	
+	<resultMap type="com.system.approval.domain.DocumentVO" id="documentMap">
+		<result column="SEQ" 		property="seq"/>
+		<result column="WRITER" 	property="writer"/>
+		<result column="TITLE" 		property="title"/>
+		<result column="CONTENT" 	property="content"/>
+		<result column="REGDATE" 	property="regDate"/>
+		<result column="APPDATE" 	property="appDate"/>
+		<result column="APPROVER" 	property="approver"/>
+		<result column="STATE_NAME" 	property="stateName"/>
+		<result column="STATE_CODE" 	property="stateCode"/>
+		<result column="APPROVER_RANK"	property="approverRank"/>
+		<result column="SUB_NAME"	property="subName"/>
+	</resultMap>
+	
+	<!-- 게시글 조회 -->
+	<select id="findDoc" parameterType="int" resultMap="documentMap">
+       select SEQ
+         	, B.NAME AS WRITER 
+         	, TITLE
+         	, CONTENT
+         	, REGDATE
+         	, APPDATE
+         	, D.NAME AS APPROVER
+         	, C.STATE_NAME AS STATE_NAME
+         	, A.STATE_CODE AS STATE_CODE
+         	, D.RANK_CODE AS APPROVER_RANK
+         	, F.NAME AS SUB_NAME
+      from LDY_DOCUMENT A join ( select NAME
+                                      , USER_CODE 
+                                   from LDY_USER) B
+                            on A.W_CODE = B.USER_CODE
+                         
+                          join ( select STATE_CODE
+                                      , STATE_NAME
+                                   from LDY_STATEMENT ) C
+                            on A.STATE_CODE = C.STATE_CODE
+                            
+                      left  join ( select NAME, 
+                                          USER_CODE, 
+                                          RANK_CODE
+                                     from LDY_USER) D
+                                on A.A_CODE = D.USER_CODE
+                      left  join ( select NAME, 
+                                           USER_CODE, 
+                                           RANK_CODE
+                                      from LDY_USER) F
+                               on A.SUB_CODE = F.USER_CODE
+    where SEQ = #{docSeq}
+	</select>
+	
+	<!-- 게시물 작성자 조회 -->
+	<select id="findWriter" parameterType="int" resultType="int">
+	select W_CODE
+	  from LDY_DOCUMENT
+	 where seq = #{seq}
+	</select>  
+	
+	
+	<!-- 게시글 리스트 조회 -->
+	<select id="findMyDoc" parameterType="map" resultMap="documentMap">
+		select DISTINCT SEQ
+         	 , B.NAME AS WRITER 
+         	 , TITLE
+         	 , CONTENT
+         	 , REGDATE
+         	 , APPDATE
+         	 , D.NAME AS APPROVER
+         	 , C.STATE_NAME AS STATE_NAME
+         	 , A.STATE_CODE AS STATE_CODE 
+         	 , F.NAME AS SUB_NAME
+      	 from  LDY_DOCUMENT A join ( select NAME
+                                      	  , USER_CODE 
+                                      	  , RANK_CODE
+                                  	   from LDY_USER) B
+                           		on A.W_CODE = B.USER_CODE
+	                          join ( select STATE_CODE
+                                      	  , STATE_NAME
+                                   	   from LDY_STATEMENT ) C
+                            	on A.STATE_CODE = C.STATE_CODE
+                      	left  join ( select NAME, 
+                                            USER_CODE, 
+                                            RANK_CODE
+                                       from LDY_USER) D
+                                on A.A_CODE = D.USER_CODE
+                        left  join (select doc_seq,
+                                    		row_number() over (partition by doc_seq order by his_seq desc) as rn,
+                                    		A_CODE
+                                	 from ldy_history
+                               		where (state_code ='S_03')) E
+                                on a.seq = E.doc_seq
+                       left  join ( select NAME, 
+                                           USER_CODE, 
+                                           RANK_CODE
+                                      from LDY_USER) F
+                               on A.SUB_CODE = F.USER_CODE
+    	where A.W_CODE = #{userCode}
+       	   or A.A_CODE = #{userCode}
+       	   or A.SUB_CODE = #{userCode}
+       	   or ((select RANK_CODE
+             	  from LDY_USER
+            	 where USER_CODE = #{userCode}) = 'B' and (C.STATE_CODE = 'S_04' or C.STATE_CODE = 'S_03'))
+           or ((select RANK_CODE
+             	  from LDY_USER
+            	 where USER_CODE = #{userCode}) = 'B' and (C.STATE_CODE = 'S_05' and D.RANK_CODE = 'B'))
+           or ((select RANK_CODE
+             	  from LDY_USER
+            	 where USER_CODE = #{userCode}) = 'G' and C.STATE_CODE = 'S_02')
+           or (rn = 1 and E.A_CODE = #{userCode})
+           <if test="subCode != null and subCode != ''">
+	           	or ((	  A.W_CODE = #{subCode}
+		       	   	   or A.A_CODE = #{subCode}
+		       	   	   or ((select RANK_CODE
+		             	  	  from LDY_USER
+		            	 	 where USER_CODE = #{subCode}) = 'B' and (C.STATE_CODE = 'S_04' or C.STATE_CODE = 'S_03'))
+		           	   or ((select RANK_CODE
+		             	  	  from LDY_USER
+		            	 	 where USER_CODE = #{subCode}) = 'B' and (C.STATE_CODE = 'S_05' and D.RANK_CODE = 'B'))
+		           	   or ((select RANK_CODE
+		             	  	  from LDY_USER
+		            	 	 where USER_CODE = #{subCode}) = 'G' and C.STATE_CODE = 'S_02')
+		           	   or (rn = 1 and E.A_CODE = #{subCode})
+	           	     )
+	           	   	   and ( TO_CHAR(REGDATE, 'yyyy-MM-dd') >= TO_CHAR( (SELECT STARTDATE
+			                                                               FROM LDY_SUBAPP
+			                                                              WHERE T_CODE = #{userCode} 
+			                                                                AND TO_CHAR(ENDDATE, 'yyyy-MM-dd') >= TO_CHAR(SYSDATE, 'yyyy-MM-dd')), 'yyyy-MM-dd' )
+	           	   			 or 
+	           	   			 TO_CHAR(APPDATE, 'yyyy-MM-dd') >= TO_CHAR( (SELECT STARTDATE
+			                                                               FROM LDY_SUBAPP
+			                                                              WHERE T_CODE = #{userCode}
+			                                                                AND TO_CHAR(ENDDATE, 'yyyy-MM-dd') >= TO_CHAR(SYSDATE, 'yyyy-MM-dd')), 'yyyy-MM-dd' )
+                            )
+                   	)
+           </if>				
+     order by SEQ DESC
+	</select>
+	
+	<!-- 게시글 검색 -->
+	<select id="findByCon" parameterType="map" resultMap="documentMap">
+		select DISTINCT SEQ
+         	 , B.NAME AS WRITER 
+         	 , TITLE
+         	 , CONTENT
+         	 , REGDATE
+         	 , APPDATE
+         	 , D.NAME AS APPROVER
+         	 , C.STATE_NAME AS STATE_NAME
+         	 , A.STATE_CODE AS STATE_CODE
+         	 , F.NAME AS SUB_NAME
+      	 from  LDY_DOCUMENT A join ( select NAME
+                                      	  , USER_CODE 
+                                      	  , RANK_CODE
+                                  	   from LDY_USER) B
+                           		on A.W_CODE = B.USER_CODE
+	                          join ( select STATE_CODE
+                                      	  , STATE_NAME
+                                   	   from LDY_STATEMENT ) C
+                            	on A.STATE_CODE = C.STATE_CODE
+                      	left  join ( select NAME, 
+                                            USER_CODE, 
+                                            RANK_CODE
+                                       from LDY_USER) D
+                                on A.A_CODE = D.USER_CODE
+                        left  join (select doc_seq,
+                                    		row_number() over (partition by doc_seq order by his_seq desc) as rn,
+                                    		A_CODE
+                                	 from ldy_history
+                               		where (state_code ='S_03')) E
+                                on a.seq = E.doc_seq
+                        left  join ( select NAME, 
+                                           USER_CODE, 
+                                           RANK_CODE
+                                      from LDY_USER) F
+                               on A.SUB_CODE = F.USER_CODE
+    	where 
+	    	   <if test="subCode != null and subCode != ''">
+	    	   	(
+	    	   </if>
+   			( A.W_CODE = #{userCode}
+       	   or A.A_CODE = #{userCode}
+       	   or ((select RANK_CODE
+             	  from LDY_USER
+            	 where USER_CODE = #{userCode}) = 'B' and (C.STATE_CODE = 'S_04' or C.STATE_CODE = 'S_03'))
+           or ((select RANK_CODE
+             	  from LDY_USER
+            	 where USER_CODE = #{userCode}) = 'B' and (C.STATE_CODE = 'S_05' and D.RANK_CODE = 'B'))
+           or ((select RANK_CODE
+             	  from LDY_USER
+            	 where USER_CODE = #{userCode}) = 'G' and C.STATE_CODE = 'S_02')
+           or (rn = 1 and E.A_CODE = #{userCode}) )
+	           <if test="subCode != null and subCode != ''">
+		           	or ((	  A.W_CODE = #{subCode}
+			       	   	   or A.A_CODE = #{subCode}
+			       	   	   or ((select RANK_CODE
+			             	  	  from LDY_USER
+			            	 	 where USER_CODE = #{subCode}) = 'B' and (C.STATE_CODE = 'S_04' or C.STATE_CODE = 'S_03'))
+			           	   or ((select RANK_CODE
+			             	  	  from LDY_USER
+			            	 	 where USER_CODE = #{subCode}) = 'B' and (C.STATE_CODE = 'S_05' and D.RANK_CODE = 'B'))
+			           	   or ((select RANK_CODE
+			             	  	  from LDY_USER
+			            	 	 where USER_CODE = #{subCode}) = 'G' and C.STATE_CODE = 'S_02')
+			           	   or (rn = 1 and E.A_CODE = #{subCode})
+		           	     )
+		           	   	   and ( TO_CHAR(REGDATE, 'yyyy-MM-dd') >= TO_CHAR( (SELECT STARTDATE
+				                                                               FROM LDY_SUBAPP
+				                                                              WHERE T_CODE = #{userCode} 
+				                                                                AND TO_CHAR(ENDDATE, 'yyyy-MM-dd') >= TO_CHAR(SYSDATE, 'yyyy-MM-dd')), 'yyyy-MM-dd' )
+		           	   			 or 
+		           	   			 TO_CHAR(APPDATE, 'yyyy-MM-dd') >= TO_CHAR( (SELECT STARTDATE
+				                                                               FROM LDY_SUBAPP
+				                                                              WHERE T_CODE = #{userCode}
+				                                                                AND TO_CHAR(ENDDATE, 'yyyy-MM-dd') >= TO_CHAR(SYSDATE, 'yyyy-MM-dd')), 'yyyy-MM-dd' )
+	                            )
+	                   	)
+	            )
+	           </if>		
+	 	   <choose>
+			   <when test="searchType == 'writer'">
+			 		and ( B.NAME like '%'||#{keyword}||'%' )
+			 	</when>
+			 	<when test="searchType == 'approver'">
+			 		and ( D.NAME like '%'||#{keyword}||'%' )
+			 	</when>
+			 	<when test="searchType == 'doc'">
+			 		and ( TITLE like '%'||#{keyword}||'%'
+			 		      or
+			 		      CONTENT like '%'||#{keyword}||'%')
+			 	</when>
+		  </choose>			
+		  <if test="strDate != null and strDate != ''">
+		 			and ( to_char(REGDATE, 'yyyy-MM-dd') between #{strDate} and #{endDate} 
+		 			  	  or 
+	 			  		  to_char(APPDATE, 'yyyy-MM-dd') between #{strDate} and #{endDate} )
+		  </if>
+		  <if test="stateCode != 'sel'">
+			 		and A.STATE_CODE = #{stateCode}
+		  </if>
+     order by SEQ DESC
+	</select>
+	
+
+	<resultMap type="com.system.approval.domain.HistoryVO" id="historyMap">
+		<result column="HIS_SEQ" 		property="hisSeq"/>
+		<result column="APPDATE" 		property="appDate"/>
+		<result column="NAME" 			property="approver"/>
+		<result column="STATE_NAME" 	property="stateName"/>
+		<result column="SUB_NAME" 		property="subName"/>
+	</resultMap>
+	
+	<!-- 게시글 히스토리 조회 -->
+	<select id="findHis" parameterType="int" resultMap="historyMap">
+	    select  HIS_SEQ
+          	  , APPDATE
+          	  , B.NAME AS NAME
+          	  , C.STATE_NAME AS STATE_NAME
+          	  , D.NAME AS SUB_NAME
+       	  from  LDY_HISTORY A join ( select NAME
+                                		 , USER_CODE
+                               		  from LDY_USER ) B
+                           	 	on A.A_CODE = B.USER_CODE
+                         	  join ( select STATE_NAME
+                                     	 , STATE_CODE
+                                 	  from LDY_STATEMENT ) C
+                           		on A.STATE_CODE = C.STATE_CODE
+                         left join ( select NAME
+                                          , USER_CODE
+                                       from LDY_USER ) D
+                                ON A.SUB_CODE = D.USER_CODE
+    	 where DOC_SEQ = #{docSeq}
+      order by HIS_SEQ DESC
+	</select>
+	
+	
+	<!-- 게시글 결재 업로드 -->
+	<update id="updateDoc" parameterType="map">
+		 update LDY_DOCUMENT
+        	set	
+                APPDATE			= sysdate
+              , A_CODE			= #{userCode}
+              , STATE_CODE		= #{stateCode}
+              <if test="subCode != null">
+              	, SUB_CODE 		= #{subCode} 
+              </if>
+              
+     	  where seq = #{seq}
+	</update>
+	
+	<!-- 게시글 등록 (임시저장 및 결재대기) -->
+	<update id="updTmp" parameterType="map">
+		 update LDY_DOCUMENT
+        	set	
+                REGDATE			= sysdate
+              , W_CODE			= #{userCode}
+              <if test="title != null">
+              	, TITLE			= #{title}
+              </if>
+              , STATE_CODE		= #{stateCode}
+              <if test="content != null">
+              	, CONTENT			= #{content}
+              </if>
+              , A_CODE 			= NULL
+              , APPDATE 		= NULL
+              , SUB_CODE 		= NULL
+     	  where seq = #{seq}
+	</update>
+	
+	
+	<!-- 대리결재 대상자 리스트 조회 -->
+	<select id="findSub" parameterType="int" resultMap="userMap">
+		SELECT  USER_CODE
+	          , ID
+	          , NAME
+	          , A.RANK_CODE  AS RANK_CODE
+	          , B.RANK_NAME	 AS RANK_NAME
+      	  FROM LDY_USER A JOIN (SELECT RANK_CODE
+                                 	 , RANK_NAME
+                              	  FROM LDY_RANK) B
+                        	ON A.RANK_CODE = B.RANK_CODE
+    	 WHERE (((SELECT RANK_CODE
+             		FROM LDY_USER
+            	   WHERE USER_CODE = #{userCode}) = 'B' AND A.RANK_CODE = 'G')
+      		OR ((SELECT RANK_CODE
+              	   FROM LDY_USER
+            	  WHERE USER_CODE = #{userCode}) = 'B' AND A.RANK_CODE = 'D')
+      		OR ((SELECT RANK_CODE
+             	   FROM LDY_USER
+            	  WHERE USER_CODE = #{userCode}) = 'B' AND A.RANK_CODE = 'S')
+      		OR ((SELECT RANK_CODE
+             	   FROM LDY_USER
+            	  WHERE USER_CODE = #{userCode}) = 'G' AND A.RANK_CODE = 'D')
+      		OR ((SELECT RANK_CODE
+             	   FROM LDY_USER
+             	  WHERE USER_CODE = #{userCode}) = 'G' AND A.RANK_CODE = 'S'))
+     	 	AND (A.USER_CODE NOT IN (SELECT T_CODE
+                                	   FROM LDY_SUBAPP
+                               		  WHERE TO_CHAR(ENDDATE, 'yyyy-MM-dd') >= TO_CHAR(SYSDATE, 'yyyy-MM-dd')))
+      ORDER BY USER_CODE ASC
+	</select>
+	
+	<!-- 대상자 지정 -->
+	<insert id="insertSub" parameterType="map">
+		insert into LDY_SUBAPP (
+								 SEQ, 
+								 G_CODE, 
+								 T_CODE, 
+								 STARTDATE, 
+								 ENDDATE
+								 )
+						  values (
+						  		 (select NVL(MAX(SEQ), 0)+1 
+		  							from LDY_SUBAPP),
+						  		 #{givenCode},
+						  		 #{takenCode},
+						  		 SYSDATE,
+						  		 SYSDATE+1
+								 )
+	</insert>
+	
+	<!-- 대리결재자 여부 확인 및 대리자 확인 -->
+	<select id="chkSub" parameterType="int" resultMap="userMap">
+		SELECT USER_CODE
+	            , ID
+	            , NAME
+	            , A.RANK_CODE AS RANK_CODE
+	            , RANK_NAME
+	       FROM LDY_USER A JOIN (SELECT G_CODE
+	                                  , T_CODE
+	                               FROM LDY_SUBAPP
+	                              WHERE T_CODE = #{userCode}
+	                              	AND TO_CHAR(ENDDATE, 'yyyy-MM-dd') >= TO_CHAR(SYSDATE, 'yyyy-MM-dd')) B
+	                          ON A.USER_CODE = B.G_CODE
+	                       JOIN (SELECT RANK_CODE
+	                                  , RANK_NAME
+	                               FROM LDY_RANK) C
+	                         ON A.RANK_CODE = C.RANK_CODE
+	</select>
+</mapper>
